@@ -1,0 +1,31 @@
+rm(list=ls())
+
+library(rio)
+library(ggplot2)
+library(ggalluvial)
+
+#data(vaccinations)
+#class(vaccinations$response)
+#class(dades$response)
+
+
+dades <- xxx
+
+set.seed(123)
+a2=ggplot(as.data.frame(dades),
+       aes(y = Freq,
+           axis1 = MGS, axis2 = Metabolite)) +
+  geom_alluvium(aes(fill = MGS),
+                width = 1/3, knot.pos = 0, reverse = FALSE) +
+  scale_fill_brewer(type = "qual", palette = "Paired") +
+  scale_color_brewer(type = "qual", palette = "Paired") +
+    guides(fill = "none") +
+  geom_stratum(alpha = .25, width = 1/3, reverse = FALSE) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank())+
+geom_text(stat = "stratum", size=2, aes(label = after_stat(stratum)),
+            reverse = FALSE) +
+  scale_x_continuous(breaks = 1:2, labels = c("MGS", "Metabolite")) 
+
+
+
