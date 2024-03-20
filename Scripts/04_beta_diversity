@@ -1,0 +1,62 @@
+
+rm(list=ls())
+
+#print(Sys.time())
+#set the seed to make it reproducible
+set.seed(123)
+##load libraries
+library(rio)
+library(vegan)
+library(ggplot2)
+#import data
+beta=xxx
+
+####### beta diversity plot############
+
+
+#### use Non-metric Multidimensional Scaling (NMDS) 
+set.seed(123)
+# Calculate PERMANOVA
+permanova <- adonis2(beta ~ MicroAlb, data = dades1, permutations = 999)
+
+# Extract p-value
+p_value <- as.character(round(permanova$"Pr(>F)"[1], 4))
+
+# Perform NMDS
+nmds <- metaMDS(beta)
+
+################################
+
+# Plot NMDS
+#plot(nmds, type = "t")
+
+# Extract NMDS coordinates
+nmds_coords <- data.frame(nmds$points)
+
+# Add group information if available
+dades1<-dades1[order(dades1$sample.id),]
+groups=as.factor(dades1$MicroAlb)
+nmds_coords$Group <- groups
+nmds_coords$Group <- factor(nmds_coords$Group, labels = c("Normal", "Micro*", "Macro*"), levels = c(0, 1, 2))
+
+# Example: If you have group information in the 'Group' column of your data
+# groups <- as.factor(dune$Group)
+# nmds_coords$Group <- groups
+
+# Plot using ggplot2
+pdf("beta_diversity_nmds_nopvalue.pdf", width = 7, height = 7)
+
+ggplot(nmds_coords, aes(x = nmds_coords[,1], y = nmds_coords[,2])) +
+  geom_point(aes(color = Group)) +
+  stat_ellipse(aes(color = Group), level = 0.95, type = "norm") + # Add confidence ellipses
+  theme_minimal() + 
+  geom_hline(yintercept = -0.5, linetype = "dashed") +  # Add horizontal line at y = 0
+  geom_vline(xintercept = -0.5, linetype = "dashed") +  # Add vertical line at x = 0
+#  geom_text(aes(x = 0.5, y = 0.5, label = paste("p-value = 0.764")), hjust = 1, vjust = 1, size = 4) +  # Add p-value annotation
+  theme(panel.grid=element_blank())
+dev.off()
+
+
+
+
+
