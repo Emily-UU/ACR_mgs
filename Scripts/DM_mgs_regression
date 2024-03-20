@@ -1,0 +1,108 @@
+rm(list=ls())
+#set the seed to make it reproducible
+set.seed(123)
+
+##load libraries
+library(rio)
+library(BiocParallel)
+library(reshape2)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ComplexHeatmap)
+library(circlize)
+library(RColorBrewer)
+library(sandwich)
+library(lmtest)
+
+
+##Folder to save the outputs
+output.folder="XXX"
+
+# load data
+dades=import("XXX")
+
+
+# remove NA in outcome
+dades=dades[which(is.na(dades[,"log.acr"])==F),]
+
+# regression functions
+fastlm.fun <- function(x,y,dades,covari=NULL,log=FALSE,rank.1=FALSE,ties.meth="keep") {
+  tryCatch({
+    xdades=dades[,c(x,y,covari)]
+    covari=paste("+",paste(covari,collapse="+"),sep="")
+    if(covari=="+"){
+      covari=NULL
+    }
+    if(log==TRUE){
+      xdades[,x]<-log(xdades[,x]+1)
+      xdades[,y]<-log(xdades[,y]+1)
+    }
+    if(rank.1==TRUE){
+      xdades[,x] <- rank(xdades[,x], ties.meth)
+      xdades[,y] <- rank(xdades[,y], ties.meth)
+      
+    }
+    
+    fit <- eval(parse(text=paste("lm(",y,"~",x,covari,", data = xdades)")))
+    coef<-summary(fit)$coefficients[x,]
+    lower= coef["Estimate"] - qt(0.975, df = fit$df) * coef["Std. Error"]
+    upper= coef["Estimate"] + qt(0.975, df = fit$df) * coef["Std. Error"]
+    data.frame(var.x=x,var.y=y, estimate = coef["Estimate"],
+               lower=lower,
+               upper=upper,
+               se = coef["Std. Error"],
+               p.value = coef["Pr(>|t|)"],
+               n = length(fit$fitted.values),
+               aic=AIC(fit))
+    
+  }, error = function(e) {
+    
+    data.frame(var.x=x,var.y=y, estimate = NA,
+               lower=NA,upper=NA,se = NA,
+               p.value = NA,
+               n = NA,aic=NA)
+  })
+}
+
+
+log.op="log1p"
+rank.op=""
+
+#variables to assess
+noms=grep("___",names(dades),value=T)
+
+#outcome
+yi="log.acr"
+#covariates
+covari=c("agev1","gender","plate","q005a")
+
+#log1p transform 
+dades[,noms]=apply(dades[,noms], 2, log1p)
+
+#run the models
+system.time(res.lm1<-bplapply(noms,function(x){
+  res.lm1 <- fastlm.fun(x,yi,dades,covari,log=FALSE,rank.1=FALSE)
+  data.frame(res.lm1)
+}, BPPARAM = MulticoreParam(16)))
+res.lm1 <- do.call(rbind, res.lm1)
+
+
+#estimate the fdr value
+res.lm1$q.value <- p.adjust(res.lm1$p.value, method = "BH")
+
+
+# add prevalence
+
+prev=import("XXX")
+prev<-prev[,c(2,3)]
+res.lm1a<-merge(prev, res.lm1, by.x="var.x", by.y="var.x")
+
+library(tidyr)
+# Use separate to split the Name column into two columns
+df <- separate(res.lm1a, col = var.x, into = c("MGS", "Number"), sep = "____")
+
+
+#save the result
+write.table(df,file=paste(output.folder,"XXX",".tsv",sep=""),
+            col.names = T,row.names = F,sep="\t")
