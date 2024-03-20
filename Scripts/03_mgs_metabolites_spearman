@@ -1,0 +1,103 @@
+rm(list=ls())
+
+library(rio)
+library(ppcor)
+library(BiocParallel)
+library(ppcor)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(reshape)
+library(plyr)
+library(ggpubr)
+library(fBasics)
+library(ordinal)
+library(car)
+library(ppcor)
+library(tidyverse)
+
+dades=import("xxx")
+
+#######################################
+# load metabolite data
+dades.meta=import("xxx")
+
+
+
+#load results
+
+spearman.cor.fun<-function(sel.res,dades,covari1,cores=5){
+  sel.lm1=sel.res
+
+  tax=dades[,sel.lm1]
+  rownames(tax)=dades$dash_id
+  met=dades[,grep("MET",names(dades),value=T)]
+  rownames(met)=dades$dash_id
+
+  covari=dades[,covari1]
+  rownames(covari)=dades$dash_id
+
+cor.fun <- function(y, x, z) {
+  
+  data <- data.frame(x, z)
+  data <- as.data.frame(model.matrix(~ ., data))
+  
+  fit <- apply(y, 2, function(ycol) {
+    
+    tryCatch({
+      
+      data$ycol <- ycol[match(rownames(data), rownames(y))]
+      data <- data[complete.cases(data), ]
+      data.frame(ppcor::pcor.test(data$ycol, data$x, data[, which(!colnames(data) %in% c("ycol", "x"))]), message = NA)
+      
+    }, warning = function(w) {
+      
+      data$ycol <- ycol[match(rownames(data), rownames(y))]
+      data <- data[complete.cases(data), ]
+      data.frame(ppcor::pcor.test(data$ycol, data$x, data[, which(!colnames(data) %in% c("ycol", "x"))]), message = paste("Warning:", w$message))
+      
+    }, error = function(e) {
+      
+      data.frame(estimate = NA, p.value = NA, statistic = NA, n = NA, gp = NA, Method = NA, message = paste("Error:", e$message))
+      
+    })
+    
+  })
+  
+  fit <- do.call(rbind, fit)
+  fit[, c("estimate", "p.value", "statistic", "n", "message")]
+  
+}
+
+  # model functions
+  met <- apply(met, 2, function(x) rank(x, "keep"))
+  tax <- apply(tax, 2, function(x) rank(x, "keep"))
+
+  res <- bplapply(colnames(tax), function(x) {
+    
+    
+    coef <- cor.fun(met, tax[, x], covari)
+    
+    data.frame(compid = colnames(met), mgs = x, coef)
+    
+  }, BPPARAM = SnowParam(cores))
+  
+  res <- do.call(rbind, res)
+  res$q.value <- p.adjust(res$p.value, method = "BH", n = sum(!is.na(res$p.value)))
+  names(res)[1:2]=c("var.y","var.x")
+  res=res[, c("var.x", "var.y", "estimate", "statistic", "p.value", "q.value", "n", "message")]
+  
+  return(res)
+}
+
+
+res1=spearman.cor.fun(sel1,dades,
+                      covari1=c("agev1","gender","q005a","plate"),
+                      cores=10)
+
+res2=spearman.cor.fun(sel1,dades,
+                      covari1=c("agev1","gender", "q005a","plate","smokestatus","GFR","bbps","bbpd","diab_treat", "HC_treat", "BMI"),
+                      cores=10)
+
+
+
